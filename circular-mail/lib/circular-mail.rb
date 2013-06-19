@@ -50,7 +50,7 @@ def self.config_has_key?(key)
   @@config.has_key?(key)
 end
 
-def self.get_config(key)
+def self.config(key)
   if @@config.has_key?(key)
     return @@config[key]
   else
@@ -116,45 +116,37 @@ class PostMaster
   attr_accessor :sender
   attr_accessor :sender_email
 
-  def config(key)
-    if CircularMail::config_has_key?(key)
-      return CircularMail::get_config(key)
-    else
-      return false
-    end
-  end
-
   def smtp_server=(server)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "SMTP server name '#{server.to_s}' is invalid!" if /^([\w\-]+\.)+\w{2,}$/.match(server.to_s).nil?
     end
     @smtp_server = server.to_s
   end
 
   def smtp_server_port=(port)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "SMTP server port '#{port.to_s}' is invalid!" if (port.to_i < 0 || port.to_i > 65535)
     end
     @smtp_server_port = port.to_i
   end
 
   def smtp_server_username=(username)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "SMTP server username '#{username.to_s}' is invalid!" if /^\S+$/.match(username.to_s).nil?
     end
     @smtp_server_username = username
   end
 
   def smtp_server_password=(password)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "SMTP server username '#{password.to_s}' is invalid!" if /^\S*$/.match(password.to_s).nil?
     end
     @smtp_server_password = password
   end
 
   def smtp_authentication=(auth_type)
-    if config('strictness')
-      CircularMail::die "Authentication type '#{auth_type}' is not a valid option!" unless config('valid_authentications').include?(auth_type)
+    if CircularMail::config('strictness')
+      CircularMail::die "Authentication type '#{auth_type}' is not a valid option!" unless CircularMail::config('valid_authentications').include?(auth_type)
     end
     @smtp_server_authentication = auth_type
   end
@@ -177,18 +169,18 @@ class PostMaster
   end
 
   def message_character_set=(charset)
-    CircularMail::die "Message character set of '#{charset}' is not supported!" unless config('valid_charsets').has_key?(charset.to_s)
+    CircularMail::die "Message character set of '#{charset}' is not supported!" unless CircularMail::config('valid_charsets').has_key?(charset.to_s)
   end
 
   def message_body=(message_body)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "Message must be a non-empty string!" if message_body.to_s.length == 0
     end
     @message_body = message_body.to_s
   end
 
   def message_format=(format)
-    CircularMail::die "No such message format exists! Expected: #{config('valid_formats')}" unless config('valid_formats').include?(format.to_s)
+    CircularMail::die "No such message format exists! Expected: #{CircularMail::config('valid_formats')}" unless CircularMail::config('valid_formats').include?(format.to_s)
     @message_format = format
   end
 
@@ -203,16 +195,16 @@ class PostMaster
   end
 
   def sender_email=(email)
-    if config('strictness')
-      CircularMail::die "Email address '#{email}' is invalid!" if config('email_validation').match(email).nil?
+    if CircularMail::config('strictness')
+      CircularMail::die "Email address '#{email}' is invalid!" if CircularMail::config('email_validation').match(email).nil?
     end
     @sender_email = email
   end
 
   def add_recipient(*args)
-    if config('strictness')
+    if CircularMail::config('strictness')
       CircularMail::die "Email address '#{args[0]}' already added to recipients list!" if @recipients.include?(args[0])
-      CircularMail::die "Email address '#{args[0]}' is invalid!" if config('email_validation').match(args[0]).nil? && config('email_group_validation').match(args[0]).nil?
+      CircularMail::die "Email address '#{args[0]}' is invalid!" if CircularMail::config('email_validation').match(args[0]).nil? && CircularMail::config('email_group_validation').match(args[0]).nil?
     end
     message_vars = []
     if args.length > 1
@@ -226,7 +218,7 @@ class PostMaster
   def remove_recipient(email)
     if @recipients.include?(email)
       @recipients.keep_if { |address| address != email}
-    elsif config('strictness')
+    elsif CircularMail::config('strictness')
       CircularMail::die "Recipient list does not contain email address '#{email}' !"
     end
   end
@@ -250,9 +242,9 @@ class PostMaster
 
   def add_attachment(filename)
     if @attachments.include?(filename)
-      CircularMail::die "Attachment '#{filename}' already added!" if config('strictness')
+      CircularMail::die "Attachment '#{filename}' already added!" if CircularMail::config('strictness')
     else
-      CircularMail::die "Attachment file '#{filename}' does not exists!" if config('strictness') && !File.exists?(filename)
+      CircularMail::die "Attachment file '#{filename}' does not exists!" if CircularMail::config('strictness') && !File.exists?(filename)
       @attachments << filename
     end
   end
@@ -260,26 +252,26 @@ class PostMaster
   def remove_attachment(filename)
     if @attachments.include?(filename)
       @attachments.keep_if { |file| file != filename}
-    elsif config('strictness')
+    elsif CircularMail::config('strictness')
       CircularMail::die "Attachment list does not contain file '#{filename}' !"
     end
   end
 
   def save_as_yaml(filename)
-    CircularMail::die "Cannot save object because file '#{filename}' already exists!" if File.exists?(filename) && config('strictness')
+    CircularMail::die "Cannot save object because file '#{filename}' already exists!" if File.exists?(filename) && CircularMail::config('strictness')
     filename = Dir.getwd() + "/dump #{CircularMail.file_timestamp()}.yaml" unless File.exists?(filename)
     File.open(filename, 'w') { |f| f.write(YAML.dump(self)) }
   end
 
   def save_as_marshal(filename)
-    CircularMail::die "Cannot save object because file '#{filename}' already exists!" if File.exists?(filename) && config('strictness')
+    CircularMail::die "Cannot save object because file '#{filename}' already exists!" if File.exists?(filename) && CircularMail::config('strictness')
     filename = Dir.getwd() + "/dump #{CircularMail.file_timestamp()}.marshal" unless File.exists?(filename)
     File.open(filename, 'w') { |f| f.write(Marshal.dump(self)) }
   end
 
   # Start sending to all recipients using the standard process
   def send()
-    self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if config('auto_backup')
+    self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if CircularMail::config('auto_backup')
 
     Net::SMTP.start(@smtp_server, @smtp_server_port, 'localhost', @smtp_server_username, @smtp_server_password, @smtp_server_authentication) do |smtp|
       #smtp.send_message msgstr, 'from@example.com', ['dest@example.com']
@@ -299,25 +291,25 @@ class PostMaster
   def initialize(*args)
     case args.length
       when 1
-        set_smtp_server(args[0], config('default_username'), config('default_password'), config('default_authentication'))
+        set_smtp_server(args[0], CircularMail::config('default_username'), CircularMail::config('default_password'), CircularMail::config('default_authentication'))
       when 2
-        set_smtp_server(args[0], args[1], config('default_password'), config('default_authentication'))
+        set_smtp_server(args[0], args[1], CircularMail::config('default_password'), CircularMail::config('default_authentication'))
       when 3
-        set_smtp_server(args[0], args[1], args[2], config('default_authentication'))
+        set_smtp_server(args[0], args[1], args[2], CircularMail::config('default_authentication'))
       when 4
         set_smtp_server(args[0], args[1], args[2], args[3])
       else
-        set_smtp_server("#{config('default_server')}:#{config('default_port').to_s}", config('default_username'), config('default_password'), config('default_authentication'))
+        set_smtp_server("#{CircularMail::config('default_server')}:#{CircularMail::config('default_port').to_s}", CircularMail::config('default_username'), CircularMail::config('default_password'), CircularMail::config('default_authentication'))
     end
-    self.message_format = config('default_format')
-    self.message_body = config('default_body')
-    self.message_character_set = config('default_charset')
-    self.mail_per_dispatch = config('default_mail_per_dispatch')
-    self.wait_after_dispatch = config('default_wait_after_dispatch')
-    self.sender_email = config('default_sender_email')
-    @recipients = config('recipients')
-    @attachments = config('attachments')
-    @sender = config('default_sender')
+    self.message_format = CircularMail::config('default_format')
+    self.message_body = CircularMail::config('default_body')
+    self.message_character_set = CircularMail::config('default_charset')
+    self.mail_per_dispatch = CircularMail::config('default_mail_per_dispatch')
+    self.wait_after_dispatch = CircularMail::config('default_wait_after_dispatch')
+    self.sender_email = CircularMail::config('default_sender_email')
+    @recipients = CircularMail::config('recipients')
+    @attachments = CircularMail::config('attachments')
+    @sender = CircularMail::config('default_sender')
   end
 
   # static
@@ -326,7 +318,7 @@ class PostMaster
   def CircularMail.from_yaml(filename)
     if File.exists?(filename)
       #o = YAML.load(File.read(filename))
-    elsif config('strictness')
+    elsif CircularMail::config('strictness')
       CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
     end
   end
@@ -334,7 +326,7 @@ class PostMaster
   def CircularMail.from_marshal(filename)
     if File.exists?(filename)
       #o = File.open(filename, 'rb') {|f| m = Marshal::load(f)}
-    elsif config('strictness')
+    elsif CircularMail::config('strictness')
       CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
     end
   end
@@ -345,21 +337,8 @@ class Message
 
 end
 
-class Header
-  public
-
-  attr_reader :fields
-
-  def initialize(*args)
-    case args.length
-      when 1
-
-      when 2
-    end
-    @field = CircularMail::HeaderField
-  end
-end
-
+# Description: This object can store 10 selected header fields, which are mandatory for CircularMail.
+#              Validation of field values is happening in this class, rather than in Header. This is due to keep Header clean.
 class HeaderField
   public
 
@@ -369,52 +348,105 @@ class HeaderField
   def set(name, body)
     case name
       when 'From'       # from
-        CircularMail::die("Inappropriate value for 'From' header field!") if config('strictness') && config('header_address_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'From' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Sender'     # sender
-        CircularMail::die("Inappropriate value for 'Sender' header field!") if config('strictness') && config('email_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Sender' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Reply-To'   # reply-to
-        CircularMail::die("Inappropriate value for 'Reply-To' header field!") if config('strictness') && config('email_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Reply-To' header field!") if CircularMail::config('strictness') && CircularMail::config('email_validation').match(body).nil?
       when 'To'         # to
-        CircularMail::die("Inappropriate value for 'From' header field!") if config('strictness') && config('header_address_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'From' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Cc'         # cc
-        CircularMail::die("Inappropriate value for 'Cc' header field!") if config('strictness') && config('header_address_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Cc' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Bcc'        # bcc
-        CircularMail::die("Inappropriate value for 'Bcc' header field!") if config('strictness') && config('header_address_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Bcc' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Message-ID' # message-id
-        CircularMail::die("Inappropriate value for 'Message-ID' header field!") if config('strictness') && config('header_msgid_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Message-ID' header field!") if CircularMail::config('strictness') && CircularMail::config('header_msgid_validation').match(body).nil?
       when 'Subject'    # subject unstructured
-        CircularMail::die("Inappropriate value for 'Subject' header field!") if config('strictness') && config('header_unstructured_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Subject' header field!") if CircularMail::config('strictness') && CircularMail::config('header_unstructured_validation').match(body).nil?
       when 'Comments'   # comments unstructured
-        CircularMail::die("Inappropriate value for 'Comments' header field!") if config('strictness') && config('header_unstructured_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Comments' header field!") if CircularMail::config('strictness') && CircularMail::config('header_unstructured_validation').match(body).nil?
       when 'Date'       # orig-date
-        CircularMail::die("Inappropriate value for 'Message-ID' header field!") if config('strictness') && config('header_date_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'Message-ID' header field!") if CircularMail::config('strictness') && CircularMail::config('header_date_validation').match(body).nil?
       else
-        if config('strictness')
-          CircularMail::die("Unsupported header field! Expected: #{config('valid_header_fields')}") unless config('valid_header_fields').include?(name)
+        if CircularMail::config('strictness')
+          CircularMail::die("Unsupported header field! Expected: #{CircularMail::config('valid_header_fields')}") unless CircularMail::config('valid_header_fields').include?(name)
         else
-          name = config('fallback_header_field')
-          body = config('fallback_header_body')
+          name = CircularMail::config('fallback_header_field')
+          body = CircularMail::config('fallback_header_body')
         end
     end
-    if config('strictness')
-      CircularMail::die("Header field body cannot contain CR, LF characters! (Don't worry, its appended automatically)") if body.include?("\r") || body.include?("\n")
+
+    if CircularMail::config('strictness')
+      CircularMail::die("Header field body cannot contain CR, LF characters! (Don't worry, it will be appended automatically)") if body.include?("\r") || body.include?("\n")
     else
       body.gsub!("\r", "")
       body.gsub!("\n", "")
     end
+
     @name = name
     @body = body
   end
 
-  def to_s()
+  def get()
     return "#{@name}:#{@body}\r\n"
   end
-  alias :get :to_s
 
   private
 
-  def initialize(name, body)
-    self.set(name, body)
+  def initialize(name = 'Comments', body = ' ')
+    set(name, body)
+  end
+end
+
+# Description: Basically holds an array of HeaderField objects.
+#              You can add, modify, remove fields, then get the whole header as a string by calling to_s (alias: get)
+class Header
+  public
+
+  attr_reader :fields
+
+  def add_field(name, body)
+    CircularMail.die("Although RFC-2822 allows multiple header fields of the same type, it *should* be avoided!") if duplicate_header?(name) && CircularMail::config('strictness')
+    field = CircularMail::HeaderField.new(name, body)
+    @fields.push(field)
+  end
+
+  def modify_field(name, body)
+    if @fields.length > 0
+      index = @fields.index{ |field| field.name == name}
+      @fields[index] = CircularMail::HeaderField.new(name, body) if index > -1 && index < @fields.size
+    end
+  end
+
+  def remove_field(name)
+    if @fields.length > 0
+      @fields.keep_if { |field| field.name != name}
+    end
+  end
+
+  def get()
+    head = ""
+    if @fields.length > 0
+      @fields.each { |field|
+        head << field.get()
+      }
+    end
+    return head
+  end
+
+  private
+
+  def initialize()
+    @fields = []
+  end
+
+  def duplicate_header?(name)
+    if @fields.length > 0
+      @fields.each { |field|
+        return true if field.name == name
+      }
+    end
+    false
   end
 end
 
