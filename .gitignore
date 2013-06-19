@@ -1,7 +1,13 @@
 *.gem
 *.rbc
+*.png
+*.zip
+build.bat
+circular-mail.gemspec
+.idea/*.*
 .bundle
 .config
+test.rb
 coverage
 InstalledFiles
 lib/bundler/man
