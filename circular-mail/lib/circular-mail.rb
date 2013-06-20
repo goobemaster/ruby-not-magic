@@ -24,8 +24,9 @@ require 'yaml'
            'default_charset' => 'us-ascii',
            'default_format' => 'text',
            'character_limit' => 998,
-           'character_limit_warn' => 78,
+           'character_limit_text' => 78,
            'default_body' => "Dear @1@,\n\nPlease be informed that...\nYour custom string is: '@2@'\n\nKind Regards,\nAnonymous",
+           'default_subject' => 'Your unique string',
            'default_sender' => '',
            'default_sender_email' => 'mail@default.com',
            'email_validation' => /^[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+(?:\.[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
@@ -35,7 +36,7 @@ require 'yaml'
            'undefined_variable' => '(?!)',
            'default_mail_per_dispatch' => 5,
            'default_wait_after_dispatch' => 3,
-           'auto_backup' => true,
+           'auto_backup_postmaster' => true,
            'cr' => 13,
            'lf' => 10,
            'header_date_validation' => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} (\+|\-)[0-9]{4}$/,
@@ -69,9 +70,9 @@ end
 def self.postmaster_from_yaml(filename)
   if File.exists?(filename)
     o = YAML.load(File.read(filename))
-    return
+    return o
   elsif config('strictness')
-    raise "Cannot load object because file '#{filename}' does not exists!"
+    die "Cannot load object because file '#{filename}' does not exists!"
   end
 end
 
@@ -80,7 +81,7 @@ def self.postmaster_from_marshal(filename)
     o = File.open(filename, 'rb') {|f| m = Marshal::load(f)}
     return o
   elsif config('strictness')
-    raise "Cannot load object because file '#{filename}' does not exists!"
+    die "Cannot load object because file '#{filename}' does not exists!"
   end
 end
 
@@ -109,6 +110,7 @@ class PostMaster
   attr_accessor :message_format
   attr_accessor :message_character_set
   attr_accessor :message_body
+  attr_accessor :message_subject
   attr_reader :attachments
   attr_reader :recipients
   attr_accessor :mail_per_dispatch
@@ -159,17 +161,19 @@ class PostMaster
     self.smtp_server_authentication = auth_type.to_s
   end
 
-  def set_message(format, message)
+  def set_message(format, subject, message)
     self.message_format = format
     if File.exists?(message.to_s)
       self.message_body = File.read(message.to_s)
     else
       self.message_body = message
     end
+    @subject = subject
   end
 
   def message_character_set=(charset)
     CircularMail::die "Message character set of '#{charset}' is not supported!" unless CircularMail::config('valid_charsets').has_key?(charset.to_s)
+    @message_character_set = charset
   end
 
   def message_body=(message_body)
@@ -257,6 +261,22 @@ class PostMaster
     end
   end
 
+  # Start sending to all recipients using the standard process
+  def send()
+    self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if CircularMail::config('auto_backup_postmaster')
+
+    Net::SMTP.start(@smtp_server, @smtp_server_port, 'localhost', @smtp_server_username, @smtp_server_password, @smtp_server_authentication) do |smtp|
+      #smtp.send_message msgstr, 'from@example.com', ['dest@example.com']
+    end
+  end
+  alias :send_all :send
+
+  # Send the message to a single recipient
+  # Useful if a recipient is complaining that he did not get the message, due to a spam filter or accidentally deleted the email
+  def send_to(email)
+
+  end
+
   def save_as_yaml(filename)
     CircularMail::die "Cannot save object because file '#{filename}' already exists!" if File.exists?(filename) && CircularMail::config('strictness')
     filename = Dir.getwd() + "/dump #{CircularMail.file_timestamp()}.yaml" unless File.exists?(filename)
@@ -269,20 +289,50 @@ class PostMaster
     File.open(filename, 'w') { |f| f.write(Marshal.dump(self)) }
   end
 
-  # Start sending to all recipients using the standard process
-  def send()
-    self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if CircularMail::config('auto_backup')
-
-    Net::SMTP.start(@smtp_server, @smtp_server_port, 'localhost', @smtp_server_username, @smtp_server_password, @smtp_server_authentication) do |smtp|
-      #smtp.send_message msgstr, 'from@example.com', ['dest@example.com']
+  def load_from_yaml(filename)
+    if File.exists?(filename)
+      o = YAML.load(File.read(filename))
+      @smtp_server = o.smtp_server
+      @smtp_server_port = o.smtp_server_port
+      @smtp_server_username = o.smtp_server_username
+      @smtp_server_password = o.smtp_server_password
+      @smtp_server_authentication = o.smtp_server_password
+      @message_format = o.smtp_server_password
+      @message_character_set = o.smtp_server_password
+      @message_body = o.smtp_server_password
+      @message_subject = o.smtp_server_password
+      @attachments = o.smtp_server_password
+      @recipients = o.smtp_server_password
+      @mail_per_dispatch = o.smtp_server_password
+      @wait_after_dispatch = o.smtp_server_password
+      @sender = o.smtp_server_password
+      @sender_email = o.smtp_server_password
+    elsif CircularMail::config('strictness')
+      CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
     end
   end
-  alias :send_all :send
 
-  # Send the message to a single recipient
-  # Useful if a recipient is complaining that he did not get the message, due to a spam filter or accidentally deleted the email
-  def send_to(email)
-
+  def load_from_marshal(filename)
+    if File.exists?(filename)
+      o = File.open(filename, 'rb') {|f| m = Marshal::load(f)}
+      @smtp_server = o.smtp_server
+      @smtp_server_port = o.smtp_server_port
+      @smtp_server_username = o.smtp_server_username
+      @smtp_server_password = o.smtp_server_password
+      @smtp_server_authentication = o.smtp_server_password
+      @message_format = o.smtp_server_password
+      @message_character_set = o.smtp_server_password
+      @message_body = o.smtp_server_password
+      @message_subject = o.smtp_server_password
+      @attachments = o.smtp_server_password
+      @recipients = o.smtp_server_password
+      @mail_per_dispatch = o.smtp_server_password
+      @wait_after_dispatch = o.smtp_server_password
+      @sender = o.smtp_server_password
+      @sender_email = o.smtp_server_password
+    elsif CircularMail::config('strictness')
+      CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
+    end
   end
 
   private
@@ -310,30 +360,95 @@ class PostMaster
     @recipients = CircularMail::config('recipients')
     @attachments = CircularMail::config('attachments')
     @sender = CircularMail::config('default_sender')
+    @subject = CircularMail::config('default_subject')
   end
-
-  # static
-  # TODO: Load from file and COPY the properties over
-
-  def CircularMail.from_yaml(filename)
-    if File.exists?(filename)
-      #o = YAML.load(File.read(filename))
-    elsif CircularMail::config('strictness')
-      CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
-    end
-  end
-
-  def CircularMail.from_marshal(filename)
-    if File.exists?(filename)
-      #o = File.open(filename, 'rb') {|f| m = Marshal::load(f)}
-    elsif CircularMail::config('strictness')
-      CircularMail::die "Cannot load object because file '#{filename}' does not exists!"
-    end
-  end
-
 end
 
 class Message
+  public
+
+  attr_accessor :header
+  attr_accessor :body
+  attr_accessor :format
+  attr_accessor :character_set
+  attr_accessor :attachments
+
+  def format=(format)
+    if CircularMail::config('valid_formats').include?(format.to_s)
+      @format = format
+    else
+      @format = CircularMail::config('default_format')
+    end
+  end
+
+  def character_set=(charset)
+    if CircularMail::config('valid_charsets').has_key?(charset.to_s)
+      @character_set = charset
+    else
+      @character_set = CircularMail::config('default_charset')
+    end
+  end
+
+  def body=(body)
+    if CircularMail::config('strictness')
+      unless body.empty?
+        if @format == 'text'
+          char_limit = CircularMail::config('character_limit_text')
+        elsif @format == 'html'
+          char_limit = CircularMail::config('character_limit')
+        end
+        body.each_line { |line|
+          CircularMail::die("Each line of body text *should not* be longer than #{char_limit} characters!") if line.length > char_limit
+        }
+      end
+    end
+    @body = body
+  end
+
+  def attachments=(file_list)
+    CircularMail::die("Attachment list must be composed of filenames in an array!") unless file_list.kind_of?([])
+    @attachments = file_list
+  end
+
+  def get()
+    if header.fields.length > 0
+      if attachments.length = 0
+        # TODO: Check for mandatory header fields
+        message = "#{@header.get()}\r\n\r\n#{@body}"
+      else
+        # TODO: Time for a Mime (such a good rhyme :)
+      end
+    else
+      CircularMail::die("Cannot generate message, because lack of header fields!") if CircularMail::config('strictness')
+      return ""
+    end
+  end
+
+  private
+
+  def initialize(*args)
+    case args.length
+      when 1
+        self.format = args[0]
+        self.character_set = CircularMail::config('default_charset')
+        @body = CircularMail::config('default_body')
+      when 2
+        self.format = args[0]
+        self.character_set = args[1]
+        @body = CircularMail::config('default_body')
+      when 3
+        self.format = args[0]
+        self.character_set = args[1]
+        @body = args[2]
+      else
+        self.format = CircularMail::config('default_format')
+        self.character_set = CircularMail::config('default_charset')
+        @body = CircularMail::config('default_body')
+    end
+
+    @header = CircularMail::Header.new()
+    @attachments = []
+  end
 
 end
 
