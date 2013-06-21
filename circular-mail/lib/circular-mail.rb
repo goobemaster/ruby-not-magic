@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 # Circular-Mail Library
 # =================================================================================================
 #      Author: gabor.major@csn.hu
@@ -44,6 +46,8 @@ require 'yaml'
            'header_address_validation' => /^[a-zA-Z ]*<[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+(?:\.[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?>$/,
            'header_msgid_validation' => /^<([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+@([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+>$/,
            'header_unstructured_validation' => /^[a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~ \.]+$/,
+           'header_content_type_validation' => /^[a-z]+\/[a-z]+;[ ]*charset=("[a-z\-]+"|[a-z\-]+)$/i,
+           'header_content_encoding_validation' => /^7bit|8bit|binary|quoted-printable|base64|ietf-token|x-token$/i,
            'fallback_header_field' => 'comments',
            'fallback_header_body' => ''}
 
@@ -92,6 +96,41 @@ end
 def self.mail_timestamp()
   # ex. Thu, 13 Feb 1969 23:32:54 -0330
   return Time.now.strftime('%a, %d %b %Y %H:%M:%S %z')
+end
+
+def self.encode(what, how)
+  case how
+    when '7bit'
+      body = ''
+    when '8bit'
+      body = ''
+    when 'binary'
+      body = ''
+    when 'quoted-printable'
+      return what.split("").pack('M*')
+    when 'base64'
+      return what.split("").pack('m*')
+    when 'ietf-token'
+      body = ''
+    when 'x-token'
+      body = ''
+  end
+end
+
+def self.check_charset(what, charset)
+  case charset
+    when 'us-ascii', 'ascii'
+      what.scan(/./).map(&:to_i).pack('C*').each_byte { |byte|
+        puts byte.to_s
+        return false unless config('valid_charsets')[charset].include?(byte)
+      }
+      return true
+    when 'utf-8'
+      return what.force_encoding("UTF-8").valid_encoding?
+    else
+      die "Cannot check this kind of character set on target string!" if config('strictness')
+      return nil
+  end
 end
 
 def self.die(message)
@@ -412,15 +451,24 @@ class Message
 
   def get()
     if header.fields.length > 0
-      if attachments.length = 0
-        # TODO: Check for mandatory header fields
-        message = "#{@header.get()}\r\n\r\n#{@body}"
+      if attachments.length == 0
+        # TODO: Check for other header fields requirements as well
+        CircularMail::die("Date and From header fields must be present in the message as per RFC-2822!") if !header.present?('Date') || !header.present?('From')
+        if header.present?('Content-Transfer-Encoding')
+          body = CircularMail::encode(@body, header.get_field('Content-Transfer-Encoding'))
+        else
+          body = @body
+        end
+        return "#{@header.get()}\r\n\r\n#{body}"
       else
-        # TODO: Time for a Mime (such a good rhyme :)
+        header.add_field('MIME-Version', '1.0')
+        # TODO: Message type VS charset
+        header.add_field('Content-Type', '')
+        header.add_field('Content-Transfer-Encoding', 'base64')
       end
     else
       CircularMail::die("Cannot generate message, because lack of header fields!") if CircularMail::config('strictness')
-      return ""
+      return nil
     end
   end
 
@@ -452,7 +500,7 @@ class Message
 
 end
 
-# Description: This object can store 10 selected header fields, which are mandatory for CircularMail.
+# Description: This object can store 15 selected header fields, which are mandatory for CircularMail.
 #              Validation of field values is happening in this class, rather than in Header. This is due to keep Header clean.
 class HeaderField
   public
@@ -482,6 +530,16 @@ class HeaderField
         CircularMail::die("Inappropriate value for 'Comments' header field!") if CircularMail::config('strictness') && CircularMail::config('header_unstructured_validation').match(body).nil?
       when 'Date'       # orig-date
         CircularMail::die("Inappropriate value for 'Message-ID' header field!") if CircularMail::config('strictness') && CircularMail::config('header_date_validation').match(body).nil?
+      when 'MIME-Version'
+        CircularMail::die("Only MIME 1.0 is supported in CircularMail!") if CircularMail::config('strictness') && body != '1.0'
+      when 'Content-Type'
+        CircularMail::die("Inappropriate value for 'Content-Type' header field!") if CircularMail::config('strictness') && CircularMail::config('header_content_type_validation').match(body).nil?
+      when 'Content-Transfer-Encoding'
+        CircularMail::die("Inappropriate value for 'Content-Transfer-Encoding' header field!") if CircularMail::config('strictness') && CircularMail::config('header_content_encoding_validation').match(body).nil?
+      when 'Content-ID'
+        CircularMail::die("Inappropriate value for 'Content-ID' header field!") if CircularMail::config('strictness') && CircularMail::config('header_msgid_validation').match(body).nil?
+      when 'Content-Description'
+
       else
         if CircularMail::config('strictness')
           CircularMail::die("Unsupported header field! Expected: #{CircularMail::config('valid_header_fields')}") unless CircularMail::config('valid_header_fields').include?(name)
@@ -549,6 +607,15 @@ class Header
     return head
   end
 
+  def get_field(name)
+    if @fields.length > 0
+      @fields.each { |field|
+        return field.body if field.name == name
+      }
+    end
+    return nil
+  end
+
   private
 
   def initialize()
@@ -563,6 +630,9 @@ class Header
     end
     false
   end
+  alias :present? :duplicate_header?
 end
 
 end
+
+puts CircularMail::check_charset("test", "us-ascii")
