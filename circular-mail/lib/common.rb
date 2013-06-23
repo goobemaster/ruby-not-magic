@@ -36,11 +36,11 @@ def self.encode(what, how)
     when '8bit'
       body = ''
     when 'binary'
-      return [what].pack('A')
+      return [what].pack('A*')
     when 'quoted-printable'
-      return [what].pack('M')
+      return [what].pack('M*')
     when 'base64'
-      return [what].pack('m')
+      return [what].pack('m*')
     when 'ietf-token'
       body = ''
     when 'x-token'
@@ -60,6 +60,16 @@ def self.check_charset(what, charset)
     else
       die "Cannot check this kind of character set on target string!" if config('strictness')
       return nil
+  end
+end
+
+def self.file_get_contents(filename)
+  c = ""
+  if File.exists?(filename)
+    File.open(filename, 'rb') { |io| c += io.read }
+    return c
+  else
+    return nil
   end
 end
 

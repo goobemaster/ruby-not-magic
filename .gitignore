@@ -2,6 +2,8 @@
 *.rbc
 *.png
 *.zip
+*.yaml
+*.xlsx
 build.bat
 circular-mail.gemspec
 .idea/*.*

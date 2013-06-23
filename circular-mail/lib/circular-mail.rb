@@ -15,6 +15,7 @@ module CircularMail
 
 require 'net/smtp'
 require 'yaml'
+require 'digest/md5'
 require 'mime.rb'
 require 'config.rb'
 require 'common.rb'
@@ -149,7 +150,7 @@ class PostMaster
 
   def set_message_variable(*args)
     # This method will add the email to recipients list if it does not exists yet!
-    unless @recipients.include?(args[0])
+    unless @recipients.include?(args[0])   #TODO: fix me! Need to look for email address INSIDE hash!
       add_recipient(*args)
     else
       # Ok, email exists lets override whatever variables it has
@@ -186,7 +187,39 @@ class PostMaster
     self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if CircularMail::config('auto_backup_postmaster')
 
     Net::SMTP.start(@smtp_server, @smtp_server_port, 'localhost', @smtp_server_username, @smtp_server_password, @smtp_server_authentication) do |smtp|
-      #smtp.send_message msgstr, 'from@example.com', ['dest@example.com']
+      message_index = 0
+
+      @recipients.each { |recipient|
+        message_index += 1
+        to_email = ""
+
+        # TODO: Message variables! Test it
+        recipient.each { |mail, vars|
+          to_email = mail
+          var_index = 0
+          vars.each { |var_value|
+            var_index += 1
+            @message_body.gsub!("@#{var_index}@", var_value)
+          }
+        }
+
+        message = CircularMail::Message.new(@message_format, @message_character_set, @message_body)
+        message.attachments = @attachments
+        message.body = @message_body
+        message.header.add_field('From', "#{@sender}<#{@sender_email}>")
+        message.header.add_field('Sender', "#{@sender}<#{@sender_email}>")
+        message.header.add_field('Reply-To', @sender_email)
+        message.header.add_field('To', "<#{to_email}>")
+        message.header.add_field('Subject', @subject)
+        message.header.add_field('Comments', 'This email was generated and posted by the CircularMail ruby library. Author is not responsible for body content!')
+        message.header.add_field('Date', CircularMail::mail_timestamp())
+        message.header.add_field('Message-ID', "<CircularMail@#{Digest::MD5.hexdigest(self.inspect)}>")
+
+        full_message = message.get()
+        puts "------------ MESSAGE ##{message_index} ------------ \r\n#{full_message}\r\n"
+
+        smtp.send_message full_message, @sender_email, to_email
+      }
     end
   end
   alias :send_all :send
@@ -334,22 +367,18 @@ class Message
   end
 
   def get()
-    if header.fields.length > 0
-      CircularMail::die("Date and From header fields must be present in the message as per RFC-2822!") if !header.present?('Date') || !header.present?('From')
-      if header.present?('Content-Transfer-Encoding')
-        message_body = CircularMail::encode(@body, header.get_field('Content-Transfer-Encoding'))
-      else
-        header.add_field('Content-Transfer-Encoding', 'base64')
-        message_body = @body
-      end
+    if @header.fields.length > 0
+      CircularMail::die("Date and From header fields must be present in the message as per RFC-2822!") if !@header.present?('Date') || !@header.present?('From')
+      @header.add_field('Content-Transfer-Encoding', 'base64') unless header.present?('Content-Transfer-Encoding')
+      message_body = CircularMail::encode(@body, @header.get_field('Content-Transfer-Encoding'))
 
-      if attachments.length == 0
-        header.add_field('Content-Type', "#{@format}/message;charset=#{@character_set}")
+      if @attachments.length == 0
+        @header.add_field('Content-Type', "#{@format}/message;charset=#{@character_set}")
         return "#{@header.get()}\r\n#{message_body}"
       else
-        header.add_field('MIME-Version', '1.0')
-        header.add_field('Content-Type', "message/rfc822;charset=#{@character_set}") # TODO: Is this correct?
-        message = "#{@header.get()}\r\n#{message_body}\r\n#{attachments_body()}"
+        @header.add_field('MIME-Version', '1.0')
+        @header.add_field('Content-Type', "message/rfc822;charset=#{@character_set}") # TODO: Is this correct?
+        return "#{@header.get()}\r\n#{message_body}\r\n#{attachments_body()}"
       end
     else
       CircularMail::die("Cannot generate message, because lack of header fields!") if CircularMail::config('strictness')
@@ -384,20 +413,20 @@ class Message
   end
 
   def attachments_body()
-    body = ""
+    attachment_body = ""
     index = 0
     @attachments.each { |filename|
       if File.exists?(filename)
         index += 1
-        attachment_body = CircularMail::encode(File.read(filename), 'base64')
-        header = CircularMail::Header.new()
-        header.add_field('Content-Type', "#{CircularMail::file_content_type?(filename)};charset=#{@character_set}")
-        header.add_field('Content-Transfer-Encoding', 'base64')
-        body << "#{header.get()}\r\n#{attachment_body}"
-        body << "\r\n" if index != @attachments.length
+        a_body = CircularMail::encode(CircularMail::file_get_contents(filename), 'base64')
+        a_header = CircularMail::Header.new()
+        a_header.add_field('Content-Type', "#{CircularMail::file_content_type?(filename)};charset=#{@character_set}")
+        a_header.add_field('Content-Transfer-Encoding', 'base64')
+        attachment_body << "#{a_header.get()}\r\n#{a_body}"
+        attachment_body << "\r\n" if index != @attachments.length
       end
     }
-    return body
+    return attachment_body
   end
 
 end
@@ -419,7 +448,7 @@ class HeaderField
       when 'Reply-To'   # reply-to
         CircularMail::die("Inappropriate value for 'Reply-To' header field!") if CircularMail::config('strictness') && CircularMail::config('email_validation').match(body).nil?
       when 'To'         # to
-        CircularMail::die("Inappropriate value for 'From' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
+        CircularMail::die("Inappropriate value for 'To' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Cc'         # cc
         CircularMail::die("Inappropriate value for 'Cc' header field!") if CircularMail::config('strictness') && CircularMail::config('header_address_validation').match(body).nil?
       when 'Bcc'        # bcc

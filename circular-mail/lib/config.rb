@@ -32,7 +32,7 @@ module CircularMail
            'header_address_validation' => /^[a-zA-Z ]*<[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+(?:\.[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?>$/,
            'header_msgid_validation' => /^<([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+@([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+>$/,
            'header_unstructured_validation' => /^[a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~ \.]+$/,
-           'header_content_type_validation' => /^[a-z0-9\-]+\/[a-z0-9\-]+;[ ]*charset=("[a-z\-]+"|[a-z\-]+)$/i,
+           'header_content_type_validation' => /^[a-z0-9\-]+\/[a-z0-9\-]+;[ ]*charset=("[a-z0-9\-]+"|[a-z0-9\-]+)$/i,
            'header_content_encoding_validation' => /^7bit|8bit|binary|quoted-printable|base64|ietf-token|x-token$/i,
            'fallback_header_field' => 'comments',
            'fallback_header_body' => ''}
