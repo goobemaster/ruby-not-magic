@@ -9,134 +9,15 @@
 #              Follows standards laid out in RFC-2822 (http://tools.ietf.org/html/rfc2822)
 # =================================================================================================
 
+$LOAD_PATH << './'
+
 module CircularMail
 
 require 'net/smtp'
 require 'yaml'
-
-@@config = {'strictness' => true,
-           'default_server' => 'mail.server.com',
-           'default_port' => 25,
-           'default_username' => 'guest',
-           'default_password' => '',
-           'default_authentication' => 'plain',
-           'valid_authentications' => ['plain', 'login', 'cram_md5'],
-           'valid_formats' => ['text', 'html'],
-           'valid_charsets' => {'us-ascii' => 1..127, 'ascii' => 1..255, 'utf-8' => 1..1114111},
-           'default_charset' => 'us-ascii',
-           'default_format' => 'text',
-           'character_limit' => 998,
-           'character_limit_text' => 78,
-           'default_body' => "Dear @1@,\n\nPlease be informed that...\nYour custom string is: '@2@'\n\nKind Regards,\nAnonymous",
-           'default_subject' => 'Your unique string',
-           'default_sender' => '',
-           'default_sender_email' => 'mail@default.com',
-           'email_validation' => /^[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+(?:\.[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
-           'email_group_validation' => /^<[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+>$/,
-           'recipients' => [],
-           'attachments' => [],
-           'undefined_variable' => '(?!)',
-           'default_mail_per_dispatch' => 5,
-           'default_wait_after_dispatch' => 3,
-           'auto_backup_postmaster' => true,
-           'cr' => 13,
-           'lf' => 10,
-           'header_date_validation' => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} (\+|\-)[0-9]{4}$/,
-           'valid_header_fields' => ['From', 'Sender', 'Reply-To', 'To', 'Cc', 'Bcc', 'Message-ID', 'Subject', 'Comments', 'Date'],
-           'header_address_validation' => /^[a-zA-Z ]*<[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+(?:\.[a-z0-9!#\$%&'\*\+\/=\?\^_`\{\|\}~\-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?>$/,
-           'header_msgid_validation' => /^<([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+@([a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~]+\.?)+>$/,
-           'header_unstructured_validation' => /^[a-zA-Z0-9!#\$%&'\*\+\-\/=\?\^_`\{\}\|~ \.]+$/,
-           'header_content_type_validation' => /^[a-z]+\/[a-z]+;[ ]*charset=("[a-z\-]+"|[a-z\-]+)$/i,
-           'header_content_encoding_validation' => /^7bit|8bit|binary|quoted-printable|base64|ietf-token|x-token$/i,
-           'fallback_header_field' => 'comments',
-           'fallback_header_body' => ''}
-
-def self.config_has_key?(key)
-  @@config.has_key?(key)
-end
-
-def self.config(key)
-  if @@config.has_key?(key)
-    return @@config[key]
-  else
-    return nil
-  end
-end
-
-def self.set_config(key, value)
-  if @@config.has_key?(key)
-    return @@config[key] = value
-  else
-    return nil
-  end
-end
-
-def self.postmaster_from_yaml(filename)
-  if File.exists?(filename)
-    o = YAML.load(File.read(filename))
-    return o
-  elsif config('strictness')
-    die "Cannot load object because file '#{filename}' does not exists!"
-  end
-end
-
-def self.postmaster_from_marshal(filename)
-  if File.exists?(filename)
-    o = File.open(filename, 'rb') {|f| m = Marshal::load(f)}
-    return o
-  elsif config('strictness')
-    die "Cannot load object because file '#{filename}' does not exists!"
-  end
-end
-
-def self.file_timestamp()
-  return Time.now.to_s[0..18].gsub(":", "-")
-end
-
-def self.mail_timestamp()
-  # ex. Thu, 13 Feb 1969 23:32:54 -0330
-  return Time.now.strftime('%a, %d %b %Y %H:%M:%S %z')
-end
-
-def self.encode(what, how)
-  case how
-    when '7bit'
-      body = ''
-    when '8bit'
-      body = ''
-    when 'binary'
-      body = ''
-    when 'quoted-printable'
-      return what.split("").pack('M*')
-    when 'base64'
-      return what.split("").pack('m*')
-    when 'ietf-token'
-      body = ''
-    when 'x-token'
-      body = ''
-  end
-end
-
-def self.check_charset(what, charset)
-  case charset
-    when 'us-ascii', 'ascii'
-      what.scan(/./).map(&:to_i).pack('C*').each_byte { |byte|
-        puts byte.to_s
-        return false unless config('valid_charsets')[charset].include?(byte)
-      }
-      return true
-    when 'utf-8'
-      return what.force_encoding("UTF-8").valid_encoding?
-    else
-      die "Cannot check this kind of character set on target string!" if config('strictness')
-      return nil
-  end
-end
-
-def self.die(message)
-  raise message << "
-  For more info please visit: https://github.com/goobemaster/ruby-not-magic/circular-mail/"
-end
+require 'mime.rb'
+require 'config.rb'
+require 'common.rb'
 
 class PostMaster
   public
@@ -441,30 +322,34 @@ class Message
         }
       end
     end
+    unless CircularMail::check_charset(body, @character_set)
+      CircularMail::die("Message body contains one or more characters which are not part of '#{@character_set}' !") if CircularMail::config('strictness')
+    end
     @body = body
   end
 
   def attachments=(file_list)
-    CircularMail::die("Attachment list must be composed of filenames in an array!") unless file_list.kind_of?([])
+    CircularMail::die("Attachment list must be composed of filenames in an array!") if file_list.class.to_s != "Array"
     @attachments = file_list
   end
 
   def get()
     if header.fields.length > 0
+      CircularMail::die("Date and From header fields must be present in the message as per RFC-2822!") if !header.present?('Date') || !header.present?('From')
+      if header.present?('Content-Transfer-Encoding')
+        message_body = CircularMail::encode(@body, header.get_field('Content-Transfer-Encoding'))
+      else
+        header.add_field('Content-Transfer-Encoding', 'base64')
+        message_body = @body
+      end
+
       if attachments.length == 0
-        # TODO: Check for other header fields requirements as well
-        CircularMail::die("Date and From header fields must be present in the message as per RFC-2822!") if !header.present?('Date') || !header.present?('From')
-        if header.present?('Content-Transfer-Encoding')
-          body = CircularMail::encode(@body, header.get_field('Content-Transfer-Encoding'))
-        else
-          body = @body
-        end
-        return "#{@header.get()}\r\n\r\n#{body}"
+        header.add_field('Content-Type', "#{@format}/message;charset=#{@character_set}")
+        return "#{@header.get()}\r\n#{message_body}"
       else
         header.add_field('MIME-Version', '1.0')
-        # TODO: Message type VS charset
-        header.add_field('Content-Type', '')
-        header.add_field('Content-Transfer-Encoding', 'base64')
+        header.add_field('Content-Type', "message/rfc822;charset=#{@character_set}") # TODO: Is this correct?
+        message = "#{@header.get()}\r\n#{message_body}\r\n#{attachments_body()}"
       end
     else
       CircularMail::die("Cannot generate message, because lack of header fields!") if CircularMail::config('strictness')
@@ -496,6 +381,23 @@ class Message
 
     @header = CircularMail::Header.new()
     @attachments = []
+  end
+
+  def attachments_body()
+    body = ""
+    index = 0
+    @attachments.each { |filename|
+      if File.exists?(filename)
+        index += 1
+        attachment_body = CircularMail::encode(File.read(filename), 'base64')
+        header = CircularMail::Header.new()
+        header.add_field('Content-Type', "#{CircularMail::file_content_type?(filename)};charset=#{@character_set}")
+        header.add_field('Content-Transfer-Encoding', 'base64')
+        body << "#{header.get()}\r\n#{attachment_body}"
+        body << "\r\n" if index != @attachments.length
+      end
+    }
+    return body
   end
 
 end
@@ -597,6 +499,10 @@ class Header
     end
   end
 
+  def remove_all_fields()
+    @fields = []
+  end
+
   def get()
     head = ""
     if @fields.length > 0
@@ -616,12 +522,6 @@ class Header
     return nil
   end
 
-  private
-
-  def initialize()
-    @fields = []
-  end
-
   def duplicate_header?(name)
     if @fields.length > 0
       @fields.each { |field|
@@ -631,8 +531,12 @@ class Header
     false
   end
   alias :present? :duplicate_header?
+
+  private
+
+  def initialize()
+    @fields = []
+  end
 end
 
 end
-
-puts CircularMail::check_charset("test", "us-ascii")
