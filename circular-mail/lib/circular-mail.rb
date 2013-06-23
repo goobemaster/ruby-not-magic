@@ -185,27 +185,33 @@ class PostMaster
   # Start sending to all recipients using the standard process
   def send()
     self.save_as_yaml(Dir.getwd() + "/backup #{CircularMail.file_timestamp()}.yaml") if CircularMail::config('auto_backup_postmaster')
+    messages_sent = 0
+    messages_dispatch = 0
 
     Net::SMTP.start(@smtp_server, @smtp_server_port, 'localhost', @smtp_server_username, @smtp_server_password, @smtp_server_authentication) do |smtp|
       message_index = 0
+      message_body_personal = ""
 
       @recipients.each { |recipient|
         message_index += 1
         to_email = ""
 
-        # TODO: Message variables! Test it
         recipient.each { |mail, vars|
           to_email = mail
           var_index = 0
-          vars.each { |var_value|
-            var_index += 1
-            @message_body.gsub!("@#{var_index}@", var_value)
-          }
+          message_body_personal = @message_body
+          if vars.length > 0
+            vars.each { |var_value|
+              var_index += 1
+              message_body_personal = message_body_personal.gsub("@#{var_index.to_s}@", var_value)
+            }
+          else
+            message_body_personal = @message_body
+          end
         }
 
-        message = CircularMail::Message.new(@message_format, @message_character_set, @message_body)
+        message = CircularMail::Message.new(@message_format, @message_character_set, message_body_personal)
         message.attachments = @attachments
-        message.body = @message_body
         message.header.add_field('From', "#{@sender}<#{@sender_email}>")
         message.header.add_field('Sender', "#{@sender}<#{@sender_email}>")
         message.header.add_field('Reply-To', @sender_email)
@@ -213,14 +219,22 @@ class PostMaster
         message.header.add_field('Subject', @subject)
         message.header.add_field('Comments', 'This email was generated and posted by the CircularMail ruby library. Author is not responsible for body content!')
         message.header.add_field('Date', CircularMail::mail_timestamp())
-        message.header.add_field('Message-ID', "<CircularMail@#{Digest::MD5.hexdigest(self.inspect)}>")
+        $message_id = Digest::MD5.hexdigest(message_body_personal)
+        message.header.add_field('Message-ID', "<CircularMail@#{$message_id}>")
 
         full_message = message.get()
-        puts "------------ MESSAGE ##{message_index} ------------ \r\n#{full_message}\r\n"
 
         smtp.send_message full_message, @sender_email, to_email
+
+        messages_sent += 1
+        messages_dispatch += 1
+        if messages_dispatch == @mail_per_dispatch
+          sleep @wait_after_dispatch
+          messages_dispatch = 0
+        end
       }
     end
+    return messages_sent
   end
   alias :send_all :send
 
@@ -372,13 +386,20 @@ class Message
       @header.add_field('Content-Transfer-Encoding', 'base64') unless header.present?('Content-Transfer-Encoding')
       message_body = CircularMail::encode(@body, @header.get_field('Content-Transfer-Encoding'))
 
+      if @format == 'text'
+        content_type = 'text/plain'
+      else
+        content_type = 'text/html'
+      end
+
       if @attachments.length == 0
-        @header.add_field('Content-Type', "#{@format}/message;charset=#{@character_set}")
+        @header.add_field('Content-Type', "#{content_type};charset=#{@character_set}")
         return "#{@header.get()}\r\n#{message_body}"
       else
         @header.add_field('MIME-Version', '1.0')
-        @header.add_field('Content-Type', "message/rfc822;charset=#{@character_set}") # TODO: Is this correct?
-        return "#{@header.get()}\r\n#{message_body}\r\n#{attachments_body()}"
+        @header.add_field('Content-Type', "multipart/mixed; boundary=#{$message_id}")
+        message_body = "Content-Type:#{content_type}\r\nContent-Transfer-Encoding:base64\r\n\r\n#{message_body}--#{$message_id}"
+        return "#{@header.get()}\r\n--#{$message_id}\r\n#{message_body}\r\n#{attachments_body()}"
       end
     else
       CircularMail::die("Cannot generate message, because lack of header fields!") if CircularMail::config('strictness')
@@ -422,8 +443,13 @@ class Message
         a_header = CircularMail::Header.new()
         a_header.add_field('Content-Type', "#{CircularMail::file_content_type?(filename)};charset=#{@character_set}")
         a_header.add_field('Content-Transfer-Encoding', 'base64')
+        a_header.add_field('Content-Disposition', "attachment;filename=\"#{File.basename(filename)}\"")
         attachment_body << "#{a_header.get()}\r\n#{a_body}"
-        attachment_body << "\r\n" if index != @attachments.length
+        if index != @attachments.length
+          attachment_body << "--#{$message_id}\r\n"
+        else
+          attachment_body << "--#{$message_id}--"
+        end
       end
     }
     return attachment_body
@@ -431,7 +457,7 @@ class Message
 
 end
 
-# Description: This object can store 15 selected header fields, which are mandatory for CircularMail.
+# Description: This object can store 16 selected header fields, which are mandatory for CircularMail.
 #              Validation of field values is happening in this class, rather than in Header. This is due to keep Header clean.
 class HeaderField
   public
@@ -470,7 +496,9 @@ class HeaderField
       when 'Content-ID'
         CircularMail::die("Inappropriate value for 'Content-ID' header field!") if CircularMail::config('strictness') && CircularMail::config('header_msgid_validation').match(body).nil?
       when 'Content-Description'
-
+        CircularMail::die("Inappropriate value for 'Content-Description' header field!") if CircularMail::config('strictness') && !CircularMail::check_charset(body, 'us-ascii')
+      when 'Content-Disposition'
+        CircularMail::die("Inappropriate value for 'Content-Disposition' header field!") if CircularMail::config('strictness') && !CircularMail::check_charset(body, 'us-ascii')
       else
         if CircularMail::config('strictness')
           CircularMail::die("Unsupported header field! Expected: #{CircularMail::config('valid_header_fields')}") unless CircularMail::config('valid_header_fields').include?(name)
