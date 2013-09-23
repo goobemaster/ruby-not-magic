@@ -1,5 +1,4 @@
 *.rbc
-*.png
 *.zip
 *.yaml
 *.xlsx
@@ -19,6 +18,8 @@ spec/reports
 test/tmp
 test/version_tmp
 tmp
+swiss-knife
+eliquid
 
 # YARD artifacts
 .yardoc
