@@ -1,0 +1,10 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    fxruby (1.6.28-x86-mingw32)
+
+PLATFORMS
+  x86-mingw32
+
+DEPENDENCIES
+  fxruby (= 1.6.28)
