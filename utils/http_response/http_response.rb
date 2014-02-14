@@ -4,9 +4,7 @@ require 'fox16'
 include Fox
 require 'net/http'
 
-class MastermindWindow < FXMainWindow
-  attr_accessor :input_url
-
+class MainWindow < FXMainWindow
   def initialize(application)
     super(application, "HTTP Response", :opts => DECOR_ALL, :x => 0, :y => 0, :width => 366, :height => 90)
     self.layoutHints = LAYOUT_EXPLICIT
@@ -81,7 +79,7 @@ end
 
 if __FILE__ == $0
   application = FXApp.new("HTTP Response", "gabor.major@csn.hu")
-  MastermindWindow.new(application)
+  MainWindow.new(application)
   application.create
   application.run
 end
