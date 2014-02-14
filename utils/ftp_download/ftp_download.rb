@@ -12,20 +12,23 @@ class MainWindow < FXMainWindow
     @label_hostname = FXLabel.new(self, 'Host name:', nil, LABEL_NORMAL, 10, 10, 84, 23)
     @label_hostname.layoutHints = LAYOUT_EXPLICIT
     @label_hostname.justify = JUSTIFY_RIGHT
-    @input_hostname = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 100, 10, 260, 23)
+    @input_hostname = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 100, 10, 150, 23)
     @input_hostname.layoutHints = LAYOUT_EXPLICIT
 
     @label_username = FXLabel.new(self, 'Username:', nil, LABEL_NORMAL, 10, 36, 84, 23)
     @label_username.layoutHints = LAYOUT_EXPLICIT
     @label_username.justify = JUSTIFY_RIGHT
-    @input_username = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 100, 36, 260, 23)
+    @input_username = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 100, 36, 150, 23)
     @input_username.layoutHints = LAYOUT_EXPLICIT
 
     @label_password = FXLabel.new(self, 'Password:', nil, LABEL_NORMAL, 10, 62, 84, 23)
     @label_password.layoutHints = LAYOUT_EXPLICIT
     @label_password.justify = JUSTIFY_RIGHT
-    @input_password = FXTextField.new(self, 40, nil, 0, TEXTFIELD_PASSWD | TEXTFIELD_NORMAL, 100, 62, 260, 23)
+    @input_password = FXTextField.new(self, 40, nil, 0, TEXTFIELD_PASSWD | TEXTFIELD_NORMAL, 100, 62, 150, 23)
     @input_password.layoutHints = LAYOUT_EXPLICIT
+
+    @checkbox_passive = FXCheckButton.new(self, 'Passive mode', nil, 0, CHECKBUTTON_NORMAL, 263, 10, 100, 23)
+    @checkbox_passive.layoutHints = LAYOUT_EXPLICIT
 
     line1 = FXHorizontalSeparator.new(self, SEPARATOR_GROOVE, 10, 90, 350, 10)
     line1.layoutHints = LAYOUT_EXPLICIT
@@ -56,27 +59,25 @@ class MainWindow < FXMainWindow
       begin
         username = @input_username.text
         password = @input_password.text
+        pattern = @input_remote_files.text.gsub('.', '\.').gsub('*', '.+').gsub('?', '.')
 
         if username.length > 0 && password.length > 0
           ftp = Net::FTP.new(@input_hostname.text, username, password)
         else
           ftp = Net::FTP.new(@input_hostname.text)
         end
+        ftp.passive = @checkbox_passive.checked?
         ftp.login
-        puts 'LOGIN'
 
-        #ftp.chdir(@input_remote_dir.text)
-        #puts 'LISTA'
-        ftp.nlst(@input_remote_dir.text + '/' + @input_remote_files.text) do |file|
-          puts "-FILE-"
-          puts file.to_s
-          puts file.name.to_s
-        end
+        files = ftp.nlst(@input_remote_dir.text)
+        files.each { |file|
+          puts file.to_s if file.to_s =~ /^#{pattern}/
+        }
 
         ftp.close
       rescue
         # Error dialog!
-        puts 'HIBA'
+        ftp.close unless ftp.nil?
       end
     }
 
