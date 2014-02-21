@@ -56,28 +56,39 @@ class MainWindow < FXMainWindow
     @dir_selector.acceptButton.text = 'Start'
 
     @dir_selector.acceptButton.connect(SEL_COMMAND) { |sender, selector, data|
-      begin
-        username = @input_username.text
-        password = @input_password.text
-        pattern = @input_remote_files.text.gsub('.', '\.').gsub('*', '.+').gsub('?', '.')
+      unless Dir.exists?(@dir_selector.directory)
+        message_box = FXMessageBox.warning(self, MBOX_OK, 'Warning', "Target directory doesn't exists!\r\n\r\n#{@dir_selector.directory}")
+      else
+        begin
+          username = @input_username.text
+          password = @input_password.text
+          pattern = @input_remote_files.text.gsub('.', '\.').gsub('*', '.+').gsub('?', '.')
 
-        if username.length > 0 && password.length > 0
-          ftp = Net::FTP.new(@input_hostname.text, username, password)
-        else
-          ftp = Net::FTP.new(@input_hostname.text)
+          if username.length > 0 && password.length > 0
+            ftp = Net::FTP.new(@input_hostname.text, username, password)
+            ftp.passive = @checkbox_passive.checked?
+            ftp.login(username, password)
+          else
+            ftp = Net::FTP.new(@input_hostname.text)
+            ftp.passive = @checkbox_passive.checked?
+            ftp.login(username)
+          end
+
+          files = ftp.nlst(@input_remote_dir.text)
+          files_retrieved = 0
+          files.each { |file|
+            if file.to_s =~ /^#{pattern}/
+              ftp.getbinaryfile(file, @dir_selector.directory + File.basename(file))
+              files_retrieved += 1
+            end
+          }
+          message_box = FXMessageBox.information(self, MBOX_OK, 'Finished', "Successfully retrieved #{files_retrieved} file(s)!")
+
+          ftp.close
+        rescue Exception => e
+          message_box = FXMessageBox.warning(self, MBOX_OK, 'Warning', "Something went wrong. Please check your credentials, and other settings.\r\n\r\n#{e.message}")
+          ftp.close unless ftp.nil?
         end
-        ftp.passive = @checkbox_passive.checked?
-        ftp.login
-
-        files = ftp.nlst(@input_remote_dir.text)
-        files.each { |file|
-          puts file.to_s if file.to_s =~ /^#{pattern}/
-        }
-
-        ftp.close
-      rescue
-        # Error dialog!
-        ftp.close unless ftp.nil?
       end
     }
 

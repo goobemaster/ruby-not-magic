@@ -2,10 +2,13 @@
 *.zip
 *.yaml
 *.xlsx
+*.exe
 build.bat
 deploy.bat
 circular-mail.gemspec
 .idea/*.*
+HyperDoc
+seneca
 .bundle
 .config
 test.rb
