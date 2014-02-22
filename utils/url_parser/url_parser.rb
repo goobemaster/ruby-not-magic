@@ -14,6 +14,7 @@ class MainWindow < FXMainWindow
 
     @input_url = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 40, 10, 320, 23)
     @input_url.layoutHints = LAYOUT_EXPLICIT
+    @input_url.text = 'http://'
 
     @label_scheme = FXLabel.new(self, 'Scheme:', nil, LABEL_NORMAL, 10, 62, 84, 23)
     @label_scheme.layoutHints = LAYOUT_EXPLICIT
@@ -52,7 +53,6 @@ class MainWindow < FXMainWindow
     @button_construct.layoutHints = LAYOUT_EXPLICIT
 
     @button_parse.connect(SEL_COMMAND) { |sender, selector, data|
-      @input_url.backColor = Fox.FXRGB(255, 255, 255)
       begin
         uri = URI(@input_url.text)
         @input_scheme.text = uri.scheme
@@ -60,14 +60,12 @@ class MainWindow < FXMainWindow
         @input_path.text = uri.path
         @input_query.text = uri.query
         @input_fragment.text = uri.fragment
-      rescue
-        # Bad URI dialog!
-        @input_url.backColor = Fox.FXRGB(255, 200, 200)
+      rescue Exception => e
+        message_box = FXMessageBox.warning(self, MBOX_OK, 'Error', "Could not parse the url:\r\n\r\n#{e.message}")
       end
     }
 
     @button_construct.connect(SEL_COMMAND) { |sender, selector, data|
-      @input_url.backColor = Fox.FXRGB(255, 255, 255)
       begin
         uri = URI('')
         uri.scheme = @input_scheme.text
@@ -76,10 +74,9 @@ class MainWindow < FXMainWindow
         uri.query = @input_query.text
         uri.fragment = @input_fragment.text
         @input_url.text = uri.to_s
-      rescue
-        # Bad URI dialog!
+      rescue Exception => e
         @input_url.text = ''
-        @input_url.backColor = Fox.FXRGB(255, 200, 200)
+        message_box = FXMessageBox.warning(self, MBOX_OK, 'Error', "Could not construct the url:\r\n\r\n#{e.message}")
       end
     }
   end
