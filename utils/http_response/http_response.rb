@@ -6,7 +6,7 @@ require 'net/http'
 
 class MainWindow < FXMainWindow
   def initialize(application)
-    super(application, "HTTP Response", :opts => DECOR_ALL, :x => 0, :y => 0, :width => 366, :height => 90)
+    super(application, "HTTP Response", :opts => DECOR_ALL, :x => 0, :y => 0, :width => 366, :height => 300)
     self.layoutHints = LAYOUT_EXPLICIT
 
     @label_url = FXLabel.new(self, ' URL:', nil, LABEL_NORMAL, 10, 10, 25, 23)
@@ -14,27 +14,34 @@ class MainWindow < FXMainWindow
 
     @input_url = FXTextField.new(self, 40, nil, 0, TEXTFIELD_NORMAL, 40, 10, 320, 23)
     @input_url.layoutHints = LAYOUT_EXPLICIT
+    @input_url.text = 'http://'
 
     @button_get = FXButton.new(self, 'GET', nil, nil, 0, BUTTON_NORMAL, 330, 36, 28, 23)
     @button_get.layoutHints = LAYOUT_EXPLICIT
 
-    @label_response = FXLabel.new(self, ' Response code:', nil, LABEL_NORMAL, 10, 59, 84, 23)
+    @label_response = FXLabel.new(self, ' Response code:', nil, LABEL_NORMAL, 10, 36, 84, 23)
     @label_response.layoutHints = LAYOUT_EXPLICIT
 
-    @label_response_code = FXLabel.new(self, '???', nil, LABEL_NORMAL, 100, 59, 160, 23)
+    @label_response_code = FXLabel.new(self, '', nil, LABEL_NORMAL, 100, 36, 160, 23)
     @label_response_code.layoutHints = LAYOUT_EXPLICIT
     @label_response_code.textColor = color('')
     @label_response_code.justify = JUSTIFY_LEFT
-    #big_font = FXFont.new(application, 'Courier New [bitstream],18,bold')
-    #@label_response_code.font = big_font
+
+    @text_response_body = FXText.new(self, nil, 0, TEXT_READONLY, 10, 66, 346, 222)
+    @text_response_body.layoutHints = LAYOUT_EXPLICIT
+    @text_response_body.editable = false
+    @text_response_body.text = 'Response has no body'
 
     @button_get.connect(SEL_COMMAND) { |sender, selector, data|
+      @text_response_body.text = 'Response has no body'
       response = get_response(@input_url.text)
-      if response == '!!!'
-        @label_response_code.text = '!!!'
+      unless response.kind_of?(Net::HTTPResponse)
+        @label_response_code.text = ''
         @label_response_code.textColor = color('')
+        message_box = FXMessageBox.warning(self, MBOX_OK, 'Error', "Could not get the response:\r\n\r\n#{response}")
       else
         @label_response_code.text = "#{response.code.to_s} #{response.message.to_s}"
+        @text_response_body.text = response.body if response.kind_of?(Net::HTTPSuccess)
         case response.code.to_s[0]
           when '2'
             @label_response_code.textColor = color('green')
@@ -51,9 +58,9 @@ class MainWindow < FXMainWindow
 
   def get_response(url)
     begin
-      Net::HTTP.get_response(URI(url)) { |response| return response }
-    rescue
-      '!!!'
+      return Net::HTTP.get_response(URI(url))
+    rescue Exception => e
+      e.message
     end
   end
 
